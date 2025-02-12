@@ -1,59 +1,54 @@
-module ALU_tb;
+module ALU (
+    input wire clk,          // Clock signal
+    input wire enable,       // Enable signal for clock gating
+    input wire [3:0] A,      // 4-bit input A
+    input wire [3:0] B,      // 4-bit input B
+    input wire [2:0] Opcode, // 3-bit opcode for selecting operation
+    output reg [3:0] Result, // 4-bit output result
+    output reg Zero          // Zero flag (1 if Result is zero, 0 otherwise)
+);
 
-    reg clk;
-    reg enable;
-    reg [3:0] A;
-    reg [3:0] B;
-    reg [2:0] Opcode;
-    wire [3:0] Result;
-    wire Zero;
+    // Opcode definitions
+    localparam ADD  = 3'b000;
+    localparam SUB  = 3'b001;
+    localparam AND  = 3'b010;
+    localparam OR   = 3'b011;
+    localparam XOR  = 3'b100;
+    localparam NOT  = 3'b101;
 
-    // Instantiate the ALU
-    ALU uut (
-        .clk(clk),
-        .enable(enable),
-        .A(A),
-        .B(B),
-        .Opcode(Opcode),
-        .Result(Result),
-        .Zero(Zero)
-    );
+    // Internal signals for pipelining
+    reg [3:0] A_reg, B_reg;
+    reg [2:0] Opcode_reg;
+    reg [3:0] Result_next;
 
-    // Clock generation
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk; // 10ns clock period
+    // Clock gating logic
+    wire gated_clk;
+    assign gated_clk = clk & enable; // Enable clock only when 'enable' is high
+
+    // Pipeline Stage 1: Register inputs
+    always @(posedge gated_clk) begin
+        A_reg <= A;
+        B_reg <= B;
+        Opcode_reg <= Opcode;
     end
 
-    // Test cases
-    initial begin
-        // Initialize inputs
-        enable = 1;
-        A = 4'b0011;
-        B = 4'b0101;
-        Opcode = 3'b000; // ADD
+    // Pipeline Stage 2: Perform computation
+    always @(*) begin
+        case (Opcode_reg)
+            ADD:  Result_next = A_reg + B_reg; // Addition
+            SUB:  Result_next = A_reg - B_reg; // Subtraction
+            AND:  Result_next = A_reg & B_reg; // Bitwise AND
+            OR:   Result_next = A_reg | B_reg; // Bitwise OR
+            XOR:  Result_next = A_reg ^ B_reg; // Bitwise XOR
+            NOT:  Result_next = ~A_reg;        // Bitwise NOT
+            default: Result_next = 4'b0000;   // Default case
+        endcase
+    end
 
-        #20; // Wait for pipeline stages
-        $display("ADD: A = %b, B = %b, Result = %b, Zero = %b", A, B, Result, Zero);
-
-        Opcode = 3'b001; // SUB
-        #20;
-        $display("SUB: A = %b, B = %b, Result = %b, Zero = %b", A, B, Result, Zero);
-
-        Opcode = 3'b010; // AND
-        #20;
-        $display("AND: A = %b, B = %b, Result = %b, Zero = %b", A, B, Result, Zero);
-
-        Opcode = 3'b101; // NOT
-        #20;
-        $display("NOT: A = %b, Result = %b, Zero = %b", A, Result, Zero);
-
-        // Disable clock gating
-        enable = 0;
-        #20;
-        $display("Clock gating disabled: Result = %b, Zero = %b", Result, Zero);
-
-        $finish;
+    // Pipeline Stage 3: Register output
+    always @(posedge gated_clk) begin
+        Result <= Result_next;
+        Zero <= (Result_next == 4'b0000) ? 1'b1 : 1'b0; // Zero flag logic
     end
 
 endmodule
